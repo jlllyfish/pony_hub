@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pony_hub 🐴</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%B4%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@gouvfr/dsfr@1.13.1/dist/dsfr.min.css">
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Marianne",arial,sans-serif; background:#fff; color:#161616; padding:20px 24px 40px; }
+  h1 { font-size:1.15rem; margin:0 0 4px; }
+  .sub { font-size:.85rem; color:#3A3A3A; margin:0 0 20px; }
+  table.pivot { border-collapse:collapse; width:100%; margin-bottom:32px; font-size:.85rem; }
+  table.pivot th, table.pivot td { border:1px solid #DDD; padding:7px 10px; text-align:center; }
+  table.pivot thead th { background:#F6F6F6; font-weight:700; }
+  table.pivot td.cat { text-align:left; font-weight:700; background:#F6F6F6; }
+  table.pivot tr.tot td { font-weight:700; color:#000091; border-top:2px solid #000091; }
+
+  .charts { display:grid; grid-template-columns:1fr; gap:24px; }
+  .chartbox { border:1px solid #E5E5E5; padding:16px; position:relative; }
+  .chartbox h2 { font-size:.95rem; margin:0 0 10px; text-align:center; padding:0 72px; }
+  .chart-tools { position:absolute; top:8px; right:8px; display:flex; gap:6px; }
+  .tool-btn { background:none !important; border:1px solid #DDD; border-radius:4px; width:28px; height:28px; padding:0; cursor:pointer; color:#000091; display:inline-flex; align-items:center; justify-content:center; opacity:1 !important; }
+  .tool-btn:hover { background:#F6F6F6 !important; opacity:1 !important; }
+  #chartBar { max-height:480px; }
+  #chartDonutBox { width:100%; max-width:560px; margin:0 auto; }
+  #chartDonut { max-height:320px; margin:0 auto; }
+
+  /* Filtre de ligne (select DSFR) */
+  .filter-row { margin:0 0 16px; }
+  .filter-row .fr-select { width:auto; min-width:14rem; max-width:100%; margin-top:0; padding:.3rem 2.25rem .3rem .75rem; font-size:.85rem; }
+  .filter-row .fr-select.active { background-color:#F5F5FE; box-shadow:inset 0 -2px 0 0 #000091; }
+
+  .toast { display:none; position:fixed; left:50%; bottom:16px; transform:translateX(-50%); background:#161616; color:#fff; padding:10px 16px; border-radius:4px; font-size:.85rem; z-index:2000; max-width:90vw; text-align:center; }
+  .toast-link { background:none !important; border:none; color:#fff !important; text-decoration:underline; cursor:pointer; padding:0; font-size:.85rem; opacity:1 !important; }
+  .preview-box { background:#fff; padding:16px; max-width:min(92vw, 900px); max-height:92vh; overflow:auto; align-self:center; margin:0 auto; position:relative; }
+  .preview-box img { max-width:100%; height:auto; display:block; border:1px solid #DDD; }
+  .preview-msg { font-size:.85rem; margin:0 24px 10px 0; color:#3A3A3A; }
+  .preview-box .config-close { position:absolute; top:6px; right:10px; }
+
+
+  .title-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .cfg-btn { background:none !important; border:1px solid #DDD; border-radius:4px; width:30px; height:30px; cursor:pointer; color:#000091; font-size:1rem; flex-shrink:0; opacity:1 !important; }
+  .cfg-btn:hover { background:#F6F6F6 !important; opacity:1 !important; }
+
+  .config-overlay { position:fixed; inset:0; background:rgba(0,0,0,.25); display:none; justify-content:flex-end; z-index:1000; }
+  .config-panel { background:#fff; width:300px; max-width:90vw; height:100%; padding:20px; box-shadow:-2px 0 8px rgba(0,0,0,.15); overflow-y:auto; }
+  .config-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:1rem; margin-bottom:16px; }
+  .config-close { background:none; border:none; font-size:1.3rem; cursor:pointer; color:#3A3A3A; line-height:1; }
+  .cfg-label { display:block; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; color:#000091; font-weight:700; margin:14px 0 6px; }
+  .cfg-check { display:flex; align-items:center; gap:8px; font-size:.9rem; margin:6px 0; cursor:pointer; }
+  .cfg-input { width:100%; border:1px solid #CCC; border-radius:4px; padding:8px 10px; font-size:.9rem; font-family:inherit; box-sizing:border-box; }
+  .cfg-color-item { margin:8px 0 14px; }
+  .cfg-color-head { display:flex; align-items:center; gap:8px; font-size:.9rem; margin-bottom:6px; }
+  .cfg-color-cur { width:16px; height:16px; border-radius:3px; border:1px solid rgba(0,0,0,.2); flex-shrink:0; }
+  .cfg-color-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cfg-swatches { display:flex; flex-wrap:wrap; gap:6px; }
+  .cfg-swatch { width:20px; height:20px; min-height:0; border-radius:50%; border:1px solid rgba(0,0,0,.15); padding:0; cursor:pointer; opacity:1 !important; }
+  .cfg-swatch[aria-pressed="true"] { box-shadow:0 0 0 2px #fff, 0 0 0 4px #161616; }
+  .cfg-custom { display:none; width:100%; height:30px; margin-top:8px; padding:0 2px; border:1px solid #CCC; border-radius:4px; background:none; cursor:pointer; }
+  .cfg-custom.open { display:block; }
+  .cfg-reset { background:none !important; border:none; color:#000091 !important; text-decoration:underline; cursor:pointer; padding:0; font-size:.8rem; margin-top:4px; opacity:1 !important; }
+  .cfg-custom-btn { display:block; margin-top:8px; }
+  .cfg-save { width:100%; margin-top:22px; background:#000091 !important; color:#fff !important; border:none; border-radius:4px; padding:10px; font-size:.9rem; font-weight:700; cursor:pointer; opacity:1 !important; }
+  .cfg-save:hover { background:#1212FF !important; opacity:1 !important; }
+</style>
+</head>
+<body>
+
+<div class="title-row">
+  <h1 id="pageTitle">Suivi des dossiers</h1>
+  <button id="cfgOpenBtn" class="cfg-btn" type="button" title="Configuration">⚙</button>
+</div>
+<p class="sub" id="pageSub">Chargement…</p>
+
+<div id="tableZone"></div>
+<div class="filter-row" id="filterRow"><select id="filterSel" class="fr-select"></select></div>
+<div class="charts">
+  <div class="chartbox" id="chartBarBox">
+    <div class="chart-tools">
+      <button type="button" class="tool-btn" data-act="copy" data-chart="chartBar" title="Copier l'image (PNG)" aria-label="Copier l'image du graphique"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 6V3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3v3c0 .552-.45 1-1.007 1H4.007A1.001 1.001 0 0 1 3 21l.003-14c0-.552.45-1 1.006-1H7zM5.002 8L5 20h10V8H5.002zM9 6h8v10h2V4H9v2z"/></svg></button>
+      <button type="button" class="tool-btn" data-act="download" data-chart="chartBar" title="Télécharger en PNG haute définition" aria-label="Télécharger le graphique en PNG"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 19h18v2H3v-2zm10-5.828L19.071 7.1l1.414 1.414L12 17 3.515 8.515 4.929 7.1 11 13.173V2h2v11.172z"/></svg></button>
+    </div>
+    <h2 id="chartBarTitle"></h2>
+    <canvas id="chartBar"></canvas>
+  </div>
+  <div class="chartbox" id="chartDonutBox">
+    <div class="chart-tools">
+      <button type="button" class="tool-btn" data-act="copy" data-chart="chartDonut" title="Copier l'image (PNG)" aria-label="Copier l'image du graphique"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 6V3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3v3c0 .552-.45 1-1.007 1H4.007A1.001 1.001 0 0 1 3 21l.003-14c0-.552.45-1 1.006-1H7zM5.002 8L5 20h10V8H5.002zM9 6h8v10h2V4H9v2z"/></svg></button>
+      <button type="button" class="tool-btn" data-act="download" data-chart="chartDonut" title="Télécharger en PNG haute définition" aria-label="Télécharger le graphique en PNG"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 19h18v2H3v-2zm10-5.828L19.071 7.1l1.414 1.414L12 17 3.515 8.515 4.929 7.1 11 13.173V2h2v11.172z"/></svg></button>
+    </div>
+    <h2 id="chartDonutTitle"></h2>
+    <canvas id="chartDonut"></canvas>
+  </div>
+</div>
+
+<div id="previewOverlay" class="config-overlay" style="justify-content:center;">
+  <div class="preview-box">
+    <button id="previewClose" class="config-close" type="button" aria-label="Fermer">&times;</button>
+    <p id="previewMsg" class="preview-msg"></p>
+    <img id="previewImg" alt="Aperçu du graphique">
+  </div>
+</div>
+<div id="toast" class="toast" role="status"></div>
+
+<div id="configOverlay" class="config-overlay">
+  <div class="config-panel">
+    <div class="config-header"><span>Configuration</span><button id="cfgClose" class="config-close" type="button">&times;</button></div>
+    <div id="cfgFields"></div>
+    <button id="cfgSave" class="cfg-save" type="button">Enregistrer</button>
+  </div>
+</div>
+
+<script>
+const NO_CATEGORY_KEY = "__ALL__";   // ligne unique quand aucune colonne "Lignes" n'est associée (ou valeur vide)
+
+// ==== Colonnes Grist : toutes optionnelles, choisies dans le panneau de droite ====
+// "name" = clé technique (ne pas changer), "panel" = libellé dans le panneau Grist
+const COLS = {
+  categorie:  { name: "Categorie",  panel: "Lignes du tableau",                                 type: "Any" },
+  valeurs:    { name: "Valeurs",    panel: "Colonnes du tableau (valeurs à additionner)",       type: "Numeric,Int", allowMultiple: true },
+  donutPart:  { name: "DonutPart",  panel: "Donut : nombre",                                      type: "Numeric,Int" },
+  donutTotal: { name: "DonutTotal", panel: "Donut : total de référence",                         type: "Numeric,Int" }
+};
+
+// ==== Titres renommables via le bouton ⚙ (vide = valeur automatique) ====
+const DEFAULT_TITLES = {
+  widgetTitle:    "Suivi des dossiers",
+  categorieTitle: "",         // vide = nom de la colonne Grist associée
+  barChartTitle:  "",         // vide = « Répartition par <1re colonne> »
+  tableIntro:     "",         // texte au-dessus du tableau ; vide = « N lignes »
+  totauxTitle:    "TOTAUX",
+  unitTitle:      "",         // unité affichée derrière les valeurs (ex. "€"), vide = aucune
+  donutTitle:     "",         // vide = « nombre / total »
+  restTitle:      "Autres"    // part restante du donut
+};
+const CONFIG_FIELDS = [
+  ["widgetTitle",    "Titre du widget"],
+  ["categorieTitle", "Titre de la 1re colonne (vide = nom Grist)"],
+  ["barChartTitle",  "Titre du graphique (histogramme) — vide = automatique"],
+  ["tableIntro",     "Texte au-dessus du tableau — vide = automatique"],
+  ["totauxTitle",    "Libellé de la ligne « Totaux »"],
+  ["unitTitle",      "Unité des valeurs (vide = aucune)"],
+  ["donutTitle",     "Titre du donut (vide = automatique)"],
+  ["restTitle",      "Libellé de la part restante du donut"]
+];
+let TITLES = { ...DEFAULT_TITLES };
+
+// ==== Couleurs (personnalisables via ⚙, sinon palette par défaut) ====
+const PALETTE = ["#000091", "#18753C", "#929292", "#B34000", "#6E445A", "#009099", "#C3992A", "#A558A0", "#417DC4", "#CE614A"];
+const DONUT_DEFAULT_COLORS = { part: "#000091", rest: "#CACAFB" };
+const SWATCHES = [...PALETTE, DONUT_DEFAULT_COLORS.rest].map(c => c.toLowerCase());   // pastilles proposées
+let pendingColors = {};   // couleurs en cours d'édition dans le panneau ⚙ (clé → couleur)
+
+function defaultColColor(i) { return PALETTE[i % PALETTE.length]; }
+function colColor(id) {
+  const i = Math.max(0, STATE.flags.valueCols.indexOf(id));
+  return (TITLES.colColors && TITLES.colColors[id]) || defaultColColor(i);
+}
+function donutColor(k) { return (TITLES.donutColors && TITLES.donutColors[k]) || DONUT_DEFAULT_COLORS[k]; }
+// Texte lisible (noir ou blanc) selon la clarté du fond
+function textOn(hex) {
+  const n = parseInt(String(hex).replace("#", ""), 16);
+  const r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#161616" : "#fff";
+}
+
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function pretty(id) { return String(id).replace(/_/g, " "); }
+function normAccent(s) { return String(s).normalize("NFC").trim(); }
+function isEmpty(v) { return v === undefined || v === null || v === ""; }
+function unitSuffix() { return TITLES.unitTitle ? " " + TITLES.unitTitle : ""; }
+function fmtVal(n) { return n.toLocaleString("fr-FR") + unitSuffix(); }
+function fmtValCompact(n) {
+  return new Intl.NumberFormat("fr-FR", { notation: "compact", compactDisplay: "short", maximumFractionDigits: 1 }).format(n) + unitSuffix();
+}
+function fmtPct(p) { return p.toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " %"; }
+
+// Titre d'une colonne de valeurs : titre personnalisé (⚙) sinon nom Grist
+function colTitle(id) { return (TITLES.colTitles && TITLES.colTitles[id]) || pretty(id); }
+function catHeader() { return TITLES.categorieTitle || (STATE.flags.catColId ? pretty(STATE.flags.catColId) : "Lignes"); }
+function catLabel(c) { return c === NO_CATEGORY_KEY ? (MODEL && MODEL.single ? "" : "(vide)") : c; }
+function titledCols() {   // colonnes dont le titre est renommable
+  const f = STATE.flags;
+  return [...new Set([...(f.valueCols || []), f.donutPartId, f.donutTotalId].filter(Boolean))];
+}
+
+// ==== État ====
+let STATE = { rows: null, flags: { valueCols: [] } };
+let MODEL = null;
+let barHidden = [];   // colonnes masquées dans l'histogramme (mémorisé dans les options du widget)
+let rowFilter = "";   // filtre unique pour tous les graphiques ("" = toutes les lignes)
+let charts = {};
+function clearCharts() { Object.keys(charts).forEach(id => { charts[id].destroy(); delete charts[id]; }); }
+
+// ==== Panneau de configuration ====
+function colorRows() {
+  const f = STATE.flags;
+  const rows = f.valueCols.map((id, i) => ({ key: "col_" + i, group: "bar", label: colTitle(id), value: colColor(id), def: defaultColColor(i) }));
+  if (f.hasDonut) {
+    rows.push({ key: "donut_part", group: "donut", label: "Donut : " + colTitle(f.donutPartId), value: donutColor("part"), def: DONUT_DEFAULT_COLORS.part });
+    rows.push({ key: "donut_rest", group: "donut", label: "Donut : " + TITLES.restTitle, value: donutColor("rest"), def: DONUT_DEFAULT_COLORS.rest });
+  }
+  return rows.map(r => ({ ...r, value: r.value.toLowerCase(), def: r.def.toLowerCase() }));
+}
+
+// Met à jour l'affichage des pastilles d'après pendingColors
+function refreshColorUI() {
+  document.querySelectorAll("#cfgFields .cfg-color-item").forEach(item => {
+    const color = pendingColors[item.dataset.key];
+    item.querySelector(".cfg-color-cur").style.backgroundColor = color;
+    item.querySelectorAll(".cfg-swatch").forEach(s => s.setAttribute("aria-pressed", s.dataset.color === color ? "true" : "false"));
+    item.querySelector(".cfg-custom").value = color;
+  });
+}
+
+// Choisit une couleur ; si une autre série du même graphique l'utilise déjà, elles sont interverties
+function setPendingColor(item, color) {
+  const key = item.dataset.key, group = item.dataset.group, old = pendingColors[key];
+  color = color.toLowerCase();
+  document.querySelectorAll(`#cfgFields .cfg-color-item[data-group="${group}"]`).forEach(other => {
+    const k = other.dataset.key;
+    if (k !== key && pendingColors[k] === color) pendingColors[k] = old;
+  });
+  pendingColors[key] = color;
+  refreshColorUI();
+}
+
+function openConfigPanel() {
+  const colors = colorRows();
+  pendingColors = {};
+  colors.forEach(c => { pendingColors[c.key] = c.value; });
+  document.getElementById("cfgFields").innerHTML =
+    CONFIG_FIELDS.map(([k, label]) =>
+      `<label class="cfg-label" for="cfg_${k}">${label}</label><input id="cfg_${k}" class="cfg-input" type="text" value="${esc(TITLES[k])}">`
+    ).join("") +
+    titledCols().map((id, i) =>
+      `<label class="cfg-label" for="cfg_col_${i}">Titre colonne « ${esc(pretty(id))} »</label><input id="cfg_col_${i}" class="cfg-input" type="text" value="${esc(colTitle(id))}">`
+    ).join("") +
+    (colors.length
+      ? '<label class="cfg-label">Couleurs</label>' + colors.map(c => {
+          const custom = !SWATCHES.includes(c.value);
+          return `<div class="cfg-color-item" data-key="${c.key}" data-group="${c.group}" data-default="${esc(c.def)}">
+            <div class="cfg-color-head"><span class="cfg-color-cur"></span><span class="cfg-color-name" title="${esc(c.label)}">${esc(c.label)}</span></div>
+            <div class="cfg-swatches">${SWATCHES.map(s =>
+              `<button type="button" class="cfg-swatch" data-color="${s}" style="background-color:${s} !important" title="${s}" aria-label="Couleur ${s}"></button>`).join("")}</div>
+            <button type="button" class="cfg-reset cfg-custom-btn" aria-expanded="${custom}">Autre couleur…</button>
+            <input type="color" class="cfg-custom${custom ? " open" : ""}" aria-label="Couleur personnalisée pour ${esc(c.label)}">
+          </div>`;
+        }).join("") +
+        '<button type="button" id="cfgColorReset" class="cfg-reset">Rétablir les couleurs par défaut</button>'
+      : "") +
+    (STATE.flags.valueCols.length > 1
+      ? '<label class="cfg-label">Colonnes affichées dans l\'histogramme</label>' + STATE.flags.valueCols.map((id, i) =>
+          `<label class="cfg-check"><input type="checkbox" id="cfg_bar_${i}" ${barHidden.includes(id) ? "" : "checked"}> ${esc(colTitle(id))}</label>`
+        ).join("")
+      : "");
+  refreshColorUI();
+  document.getElementById("configOverlay").style.display = "flex";
+}
+function closeConfigPanel() { document.getElementById("configOverlay").style.display = "none"; }
+function saveConfig() {
+  const f = STATE.flags;
+  // setOption (singulier) : ne touche pas aux autres options déjà stockées (setOptions les écraserait)
+  CONFIG_FIELDS.forEach(([k]) => {
+    const v = document.getElementById("cfg_" + k).value.trim();
+    grist.setOption(k, v || DEFAULT_TITLES[k]);
+  });
+  const colTitles = { ...(TITLES.colTitles || {}) };
+  titledCols().forEach((id, i) => {
+    const v = document.getElementById("cfg_col_" + i).value.trim();
+    if (v && v !== pretty(id)) colTitles[id] = v; else delete colTitles[id];
+  });
+  grist.setOption("colTitles", colTitles);
+
+  // Couleurs : seules les couleurs différentes du défaut sont mémorisées
+  const colColors = { ...(TITLES.colColors || {}) };
+  f.valueCols.forEach((id, i) => {
+    const v = pendingColors["col_" + i];
+    if (v && v !== defaultColColor(i).toLowerCase()) colColors[id] = v; else delete colColors[id];
+  });
+  grist.setOption("colColors", colColors);
+  if (f.hasDonut) {
+    grist.setOption("donutColors", { part: pendingColors.donut_part, rest: pendingColors.donut_rest });
+  }
+
+  if (f.valueCols.length > 1) {
+    const hidden = f.valueCols.filter((id, i) => !document.getElementById("cfg_bar_" + i).checked);
+    barHidden = hidden.length < f.valueCols.length ? hidden : [];   // au moins une colonne affichée
+    grist.setOption("barHidden", barHidden);
+    renderCharts();
+  }
+  closeConfigPanel();
+}
+function applyTitles() {
+  document.getElementById("pageTitle").textContent = TITLES.widgetTitle;
+  render();
+}
+document.getElementById("cfgOpenBtn").addEventListener("click", openConfigPanel);
+document.getElementById("cfgClose").addEventListener("click", closeConfigPanel);
+document.getElementById("cfgSave").addEventListener("click", saveConfig);
+
+// Couleurs : pastilles, bouton « Autre couleur… », rétablissement des défauts
+document.getElementById("cfgFields").addEventListener("click", e => {
+  const item = e.target.closest(".cfg-color-item");
+  if (e.target.closest(".cfg-swatch")) {
+    setPendingColor(item, e.target.closest(".cfg-swatch").dataset.color);
+  } else if (e.target.closest(".cfg-custom-btn")) {
+    const btn = e.target.closest(".cfg-custom-btn");
+    const open = item.querySelector(".cfg-custom").classList.toggle("open");
+    btn.setAttribute("aria-expanded", open);
+  } else if (e.target.id === "cfgColorReset") {
+    document.querySelectorAll("#cfgFields .cfg-color-item").forEach(it => { pendingColors[it.dataset.key] = it.dataset.default; });
+    refreshColorUI();
+  }
+});
+document.getElementById("cfgFields").addEventListener("input", e => {
+  if (e.target.classList.contains("cfg-custom")) setPendingColor(e.target.closest(".cfg-color-item"), e.target.value);
+});
+
+// Filtre de ligne commun à tous les graphiques
+document.getElementById("filterSel").addEventListener("change", e => {
+  rowFilter = e.target.value;
+  renderCharts();
+});
+
+// ==== Agrégation (somme par ligne, dans l'ordre du tableau source) ====
+function catOf(r) {
+  const v = r[COLS.categorie.name];
+  return (!STATE.flags.hasCat || isEmpty(v)) ? NO_CATEGORY_KEY : normAccent(v);
+}
+
+function aggregate(rows) {
+  const agg = {}, order = [];
+  const { valueCols } = STATE.flags;
+  rows.forEach(r => {
+    const cat = catOf(r);
+    if (!agg[cat]) {
+      agg[cat] = { v: {}, part: 0, total: 0 };
+      valueCols.forEach(id => { agg[cat].v[id] = 0; });
+      order.push(cat);
+    }
+    const vals = [].concat(r[COLS.valeurs.name] || []);
+    valueCols.forEach((id, i) => { agg[cat].v[id] += Number(vals[i]) || 0; });
+    agg[cat].part += Number(r[COLS.donutPart.name]) || 0;
+    agg[cat].total += Number(r[COLS.donutTotal.name]) || 0;
+  });
+  return { agg, order };
+}
+
+function barCols() { return STATE.flags.valueCols.map((id, i) => ({ id, i })).filter(o => !barHidden.includes(o.id)); }
+
+function sumCol(cs, id) { return cs.reduce((a, c) => a + (MODEL.agg[c].v[id] || 0), 0); }
+function sumField(cs, field) { return cs.reduce((a, c) => a + (MODEL.agg[c][field] || 0), 0); }
+
+// ==== Messages d'état ====
+function hideCharts() {
+  ["chartBarBox", "chartDonutBox", "filterRow"].forEach(id => document.getElementById(id).style.display = "none");
+  clearCharts();
+  MODEL = null;
+}
+function showMessage(msg) {
+  document.getElementById("pageSub").textContent = msg;
+  document.getElementById("tableZone").innerHTML = "";
+  hideCharts();
+}
+function showMappingNeeded() {
+  showMessage("Dans le panneau de droite, associez « Lignes du tableau » et « Colonnes du tableau ». Les colonnes « Donut » sont optionnelles.");
+}
+function showEmptyData() { showMessage("Aucune donnée à afficher pour le moment."); }
+function showNotInGrist() { showMessage("Ce widget doit être ouvert depuis un document Grist, avec l'accès « Lire les données sources sélectionnées » accordé dans le panneau de droite."); }
+
+// ==== Rendu ====
+function render() {
+  if (!STATE.rows) return;
+  const f = STATE.flags;
+  if (!f.valueCols.length && !f.hasDonut) { showMappingNeeded(); return; }
+  const { agg, order } = aggregate(STATE.rows);
+  if (!order.length) { showEmptyData(); return; }
+  const single = order.length === 1 && order[0] === NO_CATEGORY_KEY;
+  const cats = [...order.filter(c => c !== NO_CATEGORY_KEY), ...order.filter(c => c === NO_CATEGORY_KEY)];
+  MODEL = { agg, cats, single };
+  drawTable();
+  renderCharts();
+}
+
+function drawTable() {
+  const { agg, cats, single } = MODEL;
+  const cols = STATE.flags.valueCols;
+  if (!cols.length) {
+    document.getElementById("pageSub").textContent = "";
+    document.getElementById("tableZone").innerHTML = "";
+    return;
+  }
+  const tot = {};
+  cols.forEach(id => { tot[id] = sumCol(cats, id); });
+  document.getElementById("pageSub").textContent = TITLES.tableIntro || (single ? "" : `${cats.length} ligne${cats.length > 1 ? "s" : ""}`);
+
+  let h = '<table class="pivot"><thead><tr>';
+  if (!single) h += `<th>${esc(catHeader())}</th>`;
+  cols.forEach(id => h += `<th>${esc(colTitle(id))}</th>`);
+  h += '</tr></thead><tbody>';
+  if (!single) cats.forEach(c => {
+    h += `<tr><td class="cat">${esc(catLabel(c))}</td>` + cols.map(id => `<td>${fmtVal(agg[c].v[id])}</td>`).join("") + '</tr>';
+  });
+  h += '<tr class="tot">' + (single ? "" : `<td>${esc(TITLES.totauxTitle)}</td>`) + cols.map(id => `<td>${fmtVal(tot[id])}</td>`).join("") + '</tr>';
+  h += '</tbody></table>';
+  document.getElementById("tableZone").innerHTML = h;
+}
+
+// Remplit le filtre de ligne (défaut : toutes les lignes) et renvoie les lignes à afficher
+function fillFilter() {
+  const { cats, single } = MODEL;
+  const sel = document.getElementById("filterSel");
+  sel.parentElement.style.display = (single || cats.length < 2) ? "none" : "";
+  if (rowFilter && !cats.includes(rowFilter)) rowFilter = "";
+  sel.setAttribute("aria-label", "Filtrer les graphiques par " + catHeader());
+  sel.innerHTML = '<option value="">Toutes les lignes</option>' + cats.map(c => `<option value="${esc(c)}">${esc(catLabel(c))}</option>`).join("");
+  sel.value = rowFilter;
+  sel.classList.toggle("active", !!rowFilter);
+  return rowFilter ? [rowFilter] : cats;
+}
+
+function renderCharts() {
+  if (!MODEL) return;
+  const f = STATE.flags;
+  const cs = fillFilter();   // lignes retenues par le filtre, pour tous les graphiques
+
+  // Barres : une série par colonne de valeurs
+  const showBar = f.valueCols.length > 0;
+  document.getElementById("chartBarBox").style.display = showBar ? "" : "none";
+  if (showBar) {
+    document.getElementById("chartBarTitle").textContent = TITLES.barChartTitle || (MODEL.single ? TITLES.widgetTitle : `Répartition par ${catHeader()}`);
+    drawBar("chartBar", cs);
+  } else if (charts.chartBar) {
+    charts.chartBar.destroy(); delete charts.chartBar;
+  }
+
+  // Donut en % : part du « nombre » dans le « total »
+  document.getElementById("chartDonutBox").style.display = f.hasDonut ? "" : "none";
+  if (f.hasDonut) {
+    const part = sumField(cs, "part"), total = sumField(cs, "total");
+    const pct = total > 0 ? part / total * 100 : 0;
+    const base = TITLES.donutTitle || `${colTitle(f.donutPartId)} / ${colTitle(f.donutTotalId)}`;
+    document.getElementById("chartDonutTitle").textContent = `${base} (${total > 0 ? fmtPct(pct) : "—"})`;
+    drawDonut("chartDonut", part, total, colTitle(f.donutPartId));
+  } else if (charts.chartDonut) {
+    charts.chartDonut.destroy(); delete charts.chartDonut;
+  }
+}
+
+// k = facteur d'échelle des polices (1 à l'écran, plus grand à l'export)
+function barConfig(cs, k = 1) {
+  const { agg, single } = MODEL;
+  const cols = barCols();
+  const z = v => Math.round(v * k);
+  const narrow = single || cs.length === 1;
+  const labels = single ? [TITLES.totauxTitle] : cs.map(catLabel);
+  const datasets = cols.map(({ id }) => ({
+    label: colTitle(id),
+    backgroundColor: colColor(id),
+    data: cs.map(c => agg[c].v[id] || 0),
+    barPercentage: narrow ? 0.6 : 0.85,
+    categoryPercentage: narrow ? 0.7 : 0.6
+  }));
+  const maxVal = Math.max(1, ...datasets.flatMap(d => d.data));
+  return {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      layout: { padding: { top: z(26), left: z(8), right: z(8) } },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: z(12), font: { size: z(11) } } },
+        datalabels: {
+          anchor: "end", align: "end", offset: 2, clip: false,
+          color: "#161616", font: { size: z(9) },
+          formatter: v => v ? fmtValCompact(v) : ""
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: true }, ticks: { font: { size: z(12) } } },
+        y: { display: false, beginAtZero: true, suggestedMax: maxVal * 1.2 }
+      }
+    },
+    plugins: [ChartDataLabels]
+  };
+}
+
+function donutConfig(part, total, partLabel, k = 1) {
+  const z = v => Math.round(v * k);
+  const rest = Math.max(total - part, 0);
+  const colors = [donutColor("part"), donutColor("rest")];
+  const pctOf = (v, ds) => { const s = ds.reduce((a, b) => a + b, 0); return s ? fmtPct(v / s * 100) : ""; };
+  return {
+    type: "doughnut",
+    data: {
+      labels: [partLabel, TITLES.restTitle],
+      datasets: [{ data: [part, rest], backgroundColor: colors }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: z(12), font: { size: z(11) } } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label} : ${fmtVal(ctx.parsed)} (${pctOf(ctx.parsed, ctx.dataset.data)})` } },
+        datalabels: {
+          color: ctx => textOn(colors[ctx.dataIndex]),
+          font: { size: z(12), weight: "bold" },
+          formatter: (v, ctx) => v ? pctOf(v, ctx.dataset.data) : ""
+        }
+      }
+    },
+    plugins: [ChartDataLabels]
+  };
+}
+
+function drawBar(canvasId, cs) {
+  if (charts[canvasId]) charts[canvasId].destroy();
+  EXPORTS[canvasId] = { kind: "barres", cfg: k => barConfig(cs, k) };
+  charts[canvasId] = new Chart(document.getElementById(canvasId), barConfig(cs));
+}
+
+function drawDonut(canvasId, part, total, partLabel) {
+  if (charts[canvasId]) charts[canvasId].destroy();
+  EXPORTS[canvasId] = { kind: "donut", cfg: k => donutConfig(part, total, partLabel, k) };
+  charts[canvasId] = new Chart(document.getElementById(canvasId), donutConfig(part, total, partLabel));
+}
+
+// ==== Export PNG haute définition (téléchargement / copie) ====
+const EXPORTS = {};                                  // par graphique : fabrique de config, refaite à chaque rendu
+const EXPORT_SCALE = 4, EXPORT_W = 900, EXPORT_K = 1.6;   // ≈ 3600 px de large
+
+function slug(s) { return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase(); }
+
+// Redessine le graphique hors écran à haute définition, sur fond blanc, avec son titre
+function buildExportCanvas(id) {
+  const S = EXPORT_SCALE, W = EXPORT_W, H = id === "chartDonut" ? 560 : 600;
+  const title = document.getElementById(id + "Title").textContent;
+  const sub = rowFilter ? `${catHeader()} : ${catLabel(rowFilter)}` : "";
+  const headH = sub ? 92 : 64;
+
+  const chartCanvas = document.createElement("canvas");
+  chartCanvas.width = W; chartCanvas.height = H;
+  const cfg = EXPORTS[id].cfg(EXPORT_K);
+  cfg.options = { ...cfg.options, responsive: false, animation: false, devicePixelRatio: S };
+  const ch = new Chart(chartCanvas, cfg);
+  ch.draw();
+
+  const out = document.createElement("canvas");
+  out.width = W * S; out.height = (H + headH) * S;
+  const ctx = out.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, out.width, out.height);
+  ctx.textAlign = "center";
+  const family = '"Marianne", Arial, sans-serif';
+  let size = 24;
+  do { ctx.font = `bold ${size * S}px ${family}`; size--; } while (ctx.measureText(title).width > (W - 48) * S && size > 12);
+  ctx.fillStyle = "#161616";
+  ctx.fillText(title, out.width / 2, 40 * S);
+  if (sub) { ctx.fillStyle = "#3A3A3A"; ctx.font = `${16 * S}px ${family}`; ctx.fillText(sub, out.width / 2, 68 * S); }
+  ctx.drawImage(chartCanvas, 0, headH * S);
+  ch.destroy();
+  return out;
+}
+
+function canvasBlob(c) { return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error("génération de l'image impossible")), "image/png")); }
+function exportFileName(id) { return [slug(TITLES.widgetTitle) || "graphique", EXPORTS[id].kind, rowFilter ? slug(rowFilter) : ""].filter(Boolean).join("-") + ".png"; }
+
+let toastTimer;
+function showToast(msg, action) {
+  const t = document.getElementById("toast");
+  t.textContent = msg + " ";
+  if (action) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "toast-link"; b.textContent = action.label;
+    b.addEventListener("click", action.onClick);
+    t.appendChild(b);
+  }
+  t.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.display = "none"; }, 8000);
+}
+
+// Repli : aperçu de l'image, à enregistrer/copier par clic droit
+function openPreview(url, msg) {
+  document.getElementById("previewMsg").textContent = msg || "Clic droit sur l'image, puis « Copier l'image » ou « Enregistrer l'image sous… ».";
+  document.getElementById("previewImg").src = url;
+  document.getElementById("previewOverlay").style.display = "flex";
+}
+document.getElementById("previewClose").addEventListener("click", () => { document.getElementById("previewOverlay").style.display = "none"; });
+
+async function downloadPng(id) {
+  try {
+    const blob = await canvasBlob(buildExportCanvas(id));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = exportFileName(id);
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast("Téléchargement lancé.", { label: "Rien ne se passe ? Ouvrir l'aperçu", onClick: () => openPreview(url) });
+  } catch (e) { showToast("Export impossible : " + e.message); }
+}
+
+async function copyPng(id) {
+  let canvas;
+  try { canvas = buildExportCanvas(id); } catch (e) { showToast("Export impossible : " + e.message); return; }
+  try {
+    if (!navigator.clipboard || typeof ClipboardItem === "undefined") throw new Error("presse-papiers indisponible");
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": canvasBlob(canvas) })]);
+    showToast("Image copiée : collez-la avec Ctrl+V.");
+  } catch (e) {
+    try {
+      openPreview(URL.createObjectURL(await canvasBlob(canvas)), "La copie automatique est bloquée ici. Clic droit sur l'image, puis « Copier l'image » ou « Enregistrer l'image sous… ».");
+    } catch (e2) { showToast("Export impossible : " + e2.message); }
+  }
+}
+
+document.querySelectorAll(".tool-btn").forEach(b => b.addEventListener("click", () => {
+  if (!EXPORTS[b.dataset.chart]) return;
+  (b.dataset.act === "copy" ? copyPng : downloadPng)(b.dataset.chart);
+}));
+
+// ==== Intégration Grist : colonnes choisies via le panneau de droite ====
+let recordsEventFired = false;
+
+try {
+  grist.ready({
+    columns: Object.values(COLS).map(c => ({ name: c.name, title: c.panel, type: c.type, optional: true, allowMultiple: !!c.allowMultiple })),
+    requiredAccess: "read table",
+    hasCustomOptions: true,
+    onEditOptions: openConfigPanel
+  });
+
+  grist.onOptions((options) => {
+    TITLES = { ...DEFAULT_TITLES, ...(options || {}) };
+    barHidden = Array.isArray(TITLES.barHidden) ? TITLES.barHidden : [];
+    applyTitles();
+  });
+
+  grist.onRecords((records, mappings) => {
+    recordsEventFired = true;
+    const has = v => Array.isArray(v) ? v.length > 0 : !!v;
+    if (!mappings || !Object.values(mappings).some(has)) { STATE.rows = null; showMappingNeeded(); return; }
+    const mapped = grist.mapColumnNames(records, mappings);
+    if (!mapped) { STATE.rows = null; showMappingNeeded(); return; }
+    if (mapped.length === 0) { STATE.rows = null; showEmptyData(); return; }
+    const m = mappings;
+    STATE.flags = {
+      valueCols:    [].concat(m[COLS.valeurs.name] || []),
+      catColId:     m[COLS.categorie.name] || null,
+      hasCat:       !!m[COLS.categorie.name],
+      donutPartId:  m[COLS.donutPart.name] || null,
+      donutTotalId: m[COLS.donutTotal.name] || null,
+      hasDonut:     !!(m[COLS.donutPart.name] && m[COLS.donutTotal.name])
+    };
+    STATE.rows = mapped;
+    render();
+  });
+
+  setTimeout(() => { if (!recordsEventFired) showNotInGrist(); }, 1500);
+} catch (e) {
+  showNotInGrist();
+}
+</script>
+</body>
+</html>
